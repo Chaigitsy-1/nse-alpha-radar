@@ -1,0 +1,49 @@
+{
+  "project_name": "Indian Midcap Smallcap Opportunity Tracker",
+  "timezone": "Asia/Kolkata",
+  "universe": {
+    "local_files": {
+      "midcap150": "data/midcap150.csv",
+      "smallcap250": "data/smallcap250.csv"
+    },
+    "market_cap": {
+      "local_file": "data/market_cap_nse_2025_12_31.xlsx",
+      "remote_url": "https://nsearchives.nseindia.com//web/mediaattachment/2026-01/Average_MCAP_July2025ToDecember2025_20260102201101.xlsx"
+    },
+    "remote_urls": {
+      "midcap150": [
+        "https://www.niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv",
+        "https://archives.nseindia.com/content/indices/ind_niftymidcap150list.csv"
+      ],
+      "smallcap250": [
+        "https://www.niftyindices.com/IndexConstituent/ind_niftysmallcap250list.csv",
+        "https://archives.nseindia.com/content/indices/ind_niftysmallcap250list.csv"
+      ]
+    }
+  },
+  "sources": {
+    "nse_api": {
+      "announcements": "https://www.nseindia.com/api/corporate-announcements?index=equities",
+      "board_meetings": "https://www.nseindia.com/api/corporate-board-meetings?index=equities",
+      "corporate_actions": "https://www.nseindia.com/api/corporates-corporateActions?index=equities",
+      "market_indices": [
+        "NIFTY MIDCAP 150",
+        "NIFTY SMALLCAP 250"
+      ]
+    },
+    "bse_rss_candidates": [
+      "https://www.bseindia.com/data/xml/notices.xml",
+      "https://www.bseindia.com/data/xml/corpfiling.xml",
+      "https://www.bseindia.com/rssxml/rss_corporate.xml"
+    ],
+    "local_files": {
+      "price_volume": "data/price_volume.csv",
+      "fundamentals": "data/fundamentals.csv",
+      "manual_events": "data/manual_events.csv"
+    }
+  },
+  "report": {
+    "max_items_per_section": 20,
+    "email_to": "chaitusolasa1@gmail.com"
+  }
+}

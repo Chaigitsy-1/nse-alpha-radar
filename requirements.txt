@@ -1,0 +1,6 @@
+# The MVP uses only Python standard library.
+# Optional future packages:
+# pandas
+# requests
+# beautifulsoup4
+# python-dotenv

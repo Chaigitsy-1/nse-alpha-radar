@@ -1,0 +1,125 @@
+{
+  "categories": {
+    "turnaround": {
+      "weight": 1.35,
+      "keywords": [
+        "turnaround", "revival", "restructuring", "debt reduction", "deleveraging",
+        "operational improvement", "ebitda positive", "profit after tax", "loss reduced",
+        "margin expansion", "cost reduction", "capacity utilization", "utilisation improved",
+        "utilization improved", "higher utilization", "higher utilisation", "asset sale",
+        "one time settlement", "ots", "settlement with lenders", "working capital improvement",
+        "new ceo", "new managing director", "new cfo", "business transformation",
+        "plant restart", "commercial production", "order book improved", "operating leverage",
+        "loss to profit", "profitability improved", "ebitda margin improved"
+      ]
+    },
+    "short_term_trigger": {
+      "weight": 1.2,
+      "keywords": [
+        "order win", "letter of award", "loa", "contract", "purchase order",
+        "board meeting", "record date", "approval", "launch", "commissioning",
+        "commercial production", "buyback", "bonus", "split", "dividend",
+        "results", "preferential issue", "qip", "open offer", "merger",
+        "acquisition", "credit rating upgraded", "rating upgrade"
+      ]
+    },
+    "long_term_tailwind": {
+      "weight": 1.25,
+      "keywords": [
+        "capacity expansion", "capex", "greenfield", "brownfield", "backward integration",
+        "new capacity", "expanded capacity", "capacity addition", "capacity enhancement",
+        "debottlenecking", "new plant", "new facility", "phase 1", "phase 2",
+        "commercialized capacity", "ramp up", "ramp-up", "capacity ramp up",
+        "utilization ramp up", "utilisation ramp up",
+        "import substitution", "export opportunity", "production linked incentive", "pli",
+        "jal jeevan mission", "water infrastructure", "railway", "defence", "electronics manufacturing",
+        "semiconductor", "renewable energy", "solar", "wind", "transmission", "ev",
+        "data center", "power demand", "housing", "urban infrastructure", "government scheme",
+        "policy support", "china plus one", "domestic manufacturing", "revenue growth engine",
+        "growth engine", "addressable market", "industry tailwind", "sector tailwind"
+      ]
+    },
+    "management_guidance": {
+      "weight": 1.15,
+      "keywords": [
+        "guidance", "outlook", "management expects", "revenue visibility",
+        "order book", "pipeline", "margin guidance", "growth guidance",
+        "revenue growth", "profit growth", "volume growth", "demand outlook",
+        "capacity utilization", "capacity utilisation", "ramp up", "ramp-up",
+        "operating leverage", "margin expansion", "profitability improvement",
+        "target", "aspiration", "strategic priority", "concall", "investor presentation",
+        "analyst meet", "business update"
+      ]
+    },
+    "financial_quality": {
+      "weight": 1.05,
+      "keywords": [
+        "free cash flow", "cash flow", "return on capital", "roce", "roe",
+        "operating leverage", "gross margin", "ebitda margin", "net debt",
+        "debt free", "working capital", "receivables reduced", "inventory normalized",
+        "revenue growth", "sales growth", "profit growth", "pat growth",
+        "volume growth", "capacity utilization improved", "capacity utilisation improved",
+        "asset turnover", "fixed asset turnover"
+      ]
+    },
+    "sentiment": {
+      "weight": 0.75,
+      "keywords": [
+        "featured", "interview", "brokerage", "initiates coverage", "upgrade",
+        "industry leader", "market share", "positive commentary", "strong demand",
+        "robust demand", "record high", "all time high"
+      ]
+    },
+    "technical_volume": {
+      "weight": 1.0,
+      "keywords": [
+        "volume spike", "delivery volume", "breakout", "52 week high",
+        "relative strength", "accumulation", "price volume action"
+      ]
+    },
+    "trend_momentum": {
+      "weight": 1.0,
+      "keywords": []
+    },
+    "red_flag": {
+      "weight": -1.5,
+      "keywords": [
+        "auditor resignation", "resignation of auditor", "forensic audit",
+        "fraud", "default", "delay in payment", "pledge", "promoter pledge",
+        "related party", "qualified opinion", "adverse opinion", "show cause",
+        "sebi", "income tax search", "ed", "raid", "insolvency", "nclt",
+        "winding up", "downgrade", "rating downgraded", "fire", "shutdown",
+        "strike", "litigation", "penalty", "non compliance", "non-compliance"
+      ]
+    }
+  },
+  "price_volume_rules": {
+    "big_price_move_pct": 5,
+    "strong_price_move_pct": 3,
+    "volume_spike_multiple": 2.5,
+    "delivery_spike_multiple": 2.0
+  },
+  "fundamental_rules": {
+    "sales_growth_good_pct": 15,
+    "profit_growth_good_pct": 20,
+    "margin_expansion_good_bps": 150,
+    "debt_reduction_good_pct": 10,
+    "turnaround_profit_threshold": 0
+  },
+  "noise_controls": {
+    "calendar_only_multiplier": 0.35,
+    "calendar_only_confidence_cap": 0.55,
+    "top_overall_event_only_min_total": 3.0
+  },
+  "trend_rules": {
+    "ret_5d_good_pct": 3,
+    "ret_20d_good_pct": 10,
+    "ret_60d_good_pct": 20,
+    "min_ret_20d_percentile": 65,
+    "min_ret_60d_percentile": 60,
+    "overextended_20d_pct": 45,
+    "overextended_60d_pct": 90,
+    "overextended_score_multiplier": 0.55,
+    "overextended_confidence_cap": 0.58
+  }
+}
