@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .config import load_config, load_env_file
+from .cleanup import run_cleanup
 from .delivery import send_email, send_telegram
 from .filing_validation import build_filing_validation_signals
 from .lifecycle import build_capex_lifecycle_signals
@@ -112,10 +113,18 @@ def main() -> int:
         index_stats=index_stats,
         max_items=config.settings["report"]["max_items_per_section"],
     )
+    cleanup_messages = run_cleanup(
+        report_date=report_date,
+        output_dir=output_dir,
+        root=config.root,
+        settings=config.settings,
+    )
 
     print(f"Report written: {report_path}")
     print(f"Universe companies: {len(companies)}")
     print(f"Signals captured: {len(signals)}")
+    for message in cleanup_messages:
+        print(message)
     if source_errors:
         print("Source warnings:")
         for error in source_errors[:5]:

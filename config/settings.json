@@ -45,5 +45,11 @@
   "report": {
     "max_items_per_section": 20,
     "email_to": "chaitusolasa1@gmail.com"
+  },
+  "cleanup": {
+    "enabled": true,
+    "keep_full_reports_days": 7,
+    "keep_filing_cache_days": 2,
+    "keep_bhavcopy_cache_days": 120
   }
 }

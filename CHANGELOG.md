@@ -12,6 +12,12 @@ All notable changes to the Indian Stock Tracker (signals, scoring, reports, and 
 - Validation signals can now promote evidence found inside filings, not just exchange headlines.
 - Optional Ollama integration is supported through `OLLAMA_MODEL`; only shortlisted filing snippets are sent to the local model.
 
+### Cleanup / Retention
+- Added automatic cleanup after report generation.
+- Keeps compact daily summaries while deleting older full reports from active output folders.
+- Deletes old raw filing attachments from `data/filing_cache/`.
+- Keeps bhavcopy/index cache for a configurable rolling window.
+
 ### Risk/Reward Layer
 - Added a first-pass technical risk/reward model from NSE bhavcopy OHLC history.
 - Each scored company can now include:

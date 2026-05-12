@@ -71,6 +71,7 @@ indian-stock-tracker/
 - Adds a first-pass technical risk/reward layer using bhavcopy price structure.
 - Builds a derived capex lifecycle signal by connecting current signals with historical generated reports.
 - Writes a daily Markdown report.
+- Cleans up old full reports and raw filing attachments so local storage does not balloon.
 - Sends Telegram/email summaries.
 - Supports Codex scheduled automation at 8 AM.
 - Supports replay/backtest workflows for validation.
@@ -735,6 +736,30 @@ python -B -m stock_tracker.main --date today --universe marketcap --min-market-c
 ```
 
 If `.env` has Telegram credentials, Telegram will send. If email SMTP is blank, email will be skipped while the report is still generated.
+
+## Cleanup And Retention
+
+The tracker automatically cleans generated artifacts after each run.
+
+Configured in `config/settings.json`:
+
+```json
+"cleanup": {
+  "enabled": true,
+  "keep_full_reports_days": 7,
+  "keep_filing_cache_days": 2,
+  "keep_bhavcopy_cache_days": 120
+}
+```
+
+Default behavior:
+
+- daily summary files are kept
+- full Markdown reports older than 7 days are deleted from the active output folder
+- downloaded filing attachments/PDFs older than 2 days are deleted
+- bhavcopy/index cache files older than 120 days are deleted
+
+This keeps the daily system useful without letting PDFs and replay reports consume disk space. For long-term memory, keep compact summaries such as `daily_summary_YYYY-MM-DD.md`, `combined_*.md`, and `reports/strategy_progress.md`.
 
 ## Replay And Historical Digests
 
