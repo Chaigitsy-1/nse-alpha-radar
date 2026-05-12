@@ -19,10 +19,14 @@ def run_cleanup(
     messages: list[str] = []
     report_keep_days = int(cleanup_settings.get("keep_full_reports_days", 7))
     filing_keep_days = int(cleanup_settings.get("keep_filing_cache_days", 2))
+    ai_queue_keep_days = int(cleanup_settings.get("keep_ai_queue_days", 2))
+    ai_results_keep_days = int(cleanup_settings.get("keep_ai_results_days", 30))
     bhavcopy_keep_days = int(cleanup_settings.get("keep_bhavcopy_cache_days", 120))
 
     messages.extend(_cleanup_reports(output_dir, report_date, keep_days=report_keep_days))
     messages.extend(_cleanup_by_mtime(root / "data" / "filing_cache", keep_days=filing_keep_days, label="filing cache"))
+    messages.extend(_cleanup_by_mtime(root / "data" / "ai_validation_queue", keep_days=ai_queue_keep_days, label="AI validation queue"))
+    messages.extend(_cleanup_by_mtime(root / "data" / "ai_validation_results", keep_days=ai_results_keep_days, label="AI validation result"))
     messages.extend(_cleanup_bhavcopy_cache(root / "data" / "cache", report_date, keep_days=bhavcopy_keep_days))
     return messages
 
@@ -51,8 +55,6 @@ def _cleanup_by_mtime(path: Path, *, keep_days: int, label: str) -> list[str]:
     deleted = 0
     bytes_deleted = 0
     for child in path.iterdir():
-        if not child.is_file():
-            continue
         try:
             stat = child.stat()
         except OSError:
@@ -60,8 +62,11 @@ def _cleanup_by_mtime(path: Path, *, keep_days: int, label: str) -> list[str]:
         if stat.st_mtime >= cutoff:
             continue
         try:
-            bytes_deleted += stat.st_size
-            child.unlink()
+            bytes_deleted += _path_size(child)
+            if child.is_dir():
+                _delete_tree(child)
+            else:
+                child.unlink()
             deleted += 1
         except OSError:
             continue
@@ -86,6 +91,29 @@ def _cleanup_bhavcopy_cache(path: Path, report_date: date, *, keep_days: int) ->
         except OSError:
             continue
     return [f"Cleanup: deleted {deleted} market data cache file(s) older than {keep_days} days."]
+
+
+def _path_size(path: Path) -> int:
+    if path.is_file():
+        return path.stat().st_size
+    total = 0
+    for child in path.rglob("*"):
+        if not child.is_file():
+            continue
+        try:
+            total += child.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def _delete_tree(path: Path) -> None:
+    for child in sorted(path.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+        if child.is_dir():
+            child.rmdir()
+        else:
+            child.unlink()
+    path.rmdir()
 
 
 def _report_date(path: Path) -> date | None:

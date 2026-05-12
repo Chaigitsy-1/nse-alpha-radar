@@ -3,6 +3,8 @@ __pycache__/
 .env
 data/cache/
 data/filing_cache/
+data/ai_validation_queue/
+data/ai_validation_results/
 data/market_cap_*.xlsx
 reports/*
 !reports/strategy_progress.md

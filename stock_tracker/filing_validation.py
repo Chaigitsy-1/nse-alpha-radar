@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import urllib.request
@@ -111,7 +110,8 @@ def build_filing_validation_signals(
 
     PDF parsing is intentionally conservative: if no local PDF parser is installed,
     the engine still uses NSE-provided text/title metadata and cached attachment bytes.
-    Optional Ollama classification is available only when OLLAMA_MODEL is set.
+    Model-based validation is handled by stock_tracker.ai_validation so this
+    local pass remains cheap, deterministic, and available as a fallback.
     """
     max_filings = max_filings or int(os.getenv("FILING_VALIDATION_MAX_FILINGS", "45") or "45")
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -137,10 +137,6 @@ def build_filing_validation_signals(
         deterministic = _deterministic_validation(symbol, company.name, item, combined, extraction_note)
         if deterministic:
             signals.append(_to_signal(deterministic))
-
-        model_signal = _ollama_validation(symbol, company.name, item, combined)
-        if model_signal:
-            signals.append(_to_signal(model_signal))
 
     if checked >= max_filings:
         errors.append(f"Filing validation capped at {max_filings} important filings for this run.")
@@ -308,68 +304,6 @@ def _extract_growth_numbers(text: str) -> list[str]:
                 out.append(f"{label} {value:.1f}%")
                 break
     return out
-
-
-def _ollama_validation(
-    symbol: str,
-    company_name: str,
-    item: SourceItem,
-    text: str,
-) -> FilingValidation | None:
-    model = os.getenv("OLLAMA_MODEL", "").strip()
-    if not model or not text:
-        return None
-    prompt = (
-        "Classify this Indian stock exchange filing for investment research. "
-        "Return strict JSON with keys: materiality (low/medium/high), "
-        "sentiment (negative/neutral/positive), reason (short). "
-        "Do not invent numbers.\n\n"
-        f"Company: {company_name} ({symbol})\n"
-        f"Filing: {item.title}\n"
-        f"Text:\n{text[:3500]}"
-    )
-    try:
-        payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
-        request = urllib.request.Request(
-            "http://127.0.0.1:11434/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=45) as response:
-            data = json.loads(response.read().decode("utf-8", errors="replace"))
-        response_text = data.get("response", "")
-        parsed = _parse_jsonish(response_text)
-    except Exception:
-        return None
-
-    materiality = str(parsed.get("materiality", "")).lower()
-    sentiment = str(parsed.get("sentiment", "")).lower()
-    reason = str(parsed.get("reason", "")).strip()
-    if materiality not in {"medium", "high"} or sentiment != "positive":
-        return None
-    return FilingValidation(
-        symbol=symbol,
-        company_name=company_name,
-        category="filing_validation",
-        label=f"ollama validated: {materiality} materiality, {sentiment}",
-        score=1.2 if materiality == "medium" else 1.6,
-        confidence=0.56,
-        evidence=f"Ollama filing validation: {reason[:180]}",
-        source=f"Ollama filing validation ({model})",
-        link=item.link,
-        horizon="long",
-    )
-
-
-def _parse_jsonish(text: str) -> dict:
-    match = re.search(r"\{.*\}", text, re.S)
-    if not match:
-        return {}
-    try:
-        return json.loads(match.group(0))
-    except Exception:
-        return {}
 
 
 def _to_signal(validation: FilingValidation) -> Signal:

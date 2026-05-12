@@ -67,6 +67,7 @@ indian-stock-tracker/
 - Pulls NSE corporate announcements, board meetings, corporate actions, market snapshots, index closes, and bhavcopy data.
 - Classifies signals into short-term triggers, long-term tailwinds, management guidance, financial quality, turnaround, technical volume, trend momentum, sentiment, red flags, and capex lifecycle.
 - Downloads/caches important NSE attachments and performs local filing validation before any model is needed.
+- Optionally runs a second AI validation pass through Codex queue, Ollama, or OpenRouter.
 - Uses bhavcopy history for 5d/20d/60d trend and relative strength percentiles.
 - Adds a first-pass technical risk/reward layer using bhavcopy price structure.
 - Builds a derived capex lifecycle signal by connecting current signals with historical generated reports.
@@ -269,18 +270,55 @@ What it does locally:
 - scans extracted text and NSE metadata for growth, margin, capex, order book, guidance, turnaround, and red-flag terms
 - creates a `filing_validation` signal when it finds supporting evidence
 
-Optional local-model mode:
+### AI Filing Validation
+
+The deterministic filing-validation layer is always the first line of defense. A second AI layer can be enabled when deeper judgement is needed.
+
+Set one provider in `.env`:
 
 ```env
-OLLAMA_MODEL=phi3
+AI_PROVIDER=none
 ```
 
-When `OLLAMA_MODEL` is set and Ollama is running locally, the tracker sends only a short extracted snippet from shortlisted important filings to Ollama. It asks for a tiny JSON classification: materiality, sentiment, and reason. This is optional and is not required for the core tracker.
+Supported values:
+
+- `none`: default; Python-only deterministic validation
+- `codex_queue`: writes shortlisted filings to `data/ai_validation_queue/YYYY-MM-DD/` for Codex to validate using the workspace model
+- `ollama`: sends shortlisted snippets to a local Ollama model
+- `openrouter`: sends shortlisted snippets to OpenRouter
+
+Codex queue mode:
+
+```env
+AI_PROVIDER=codex_queue
+AI_VALIDATION_MAX_FILINGS=8
+```
+
+The first run writes JSON packets for important filings. Codex can read those packets, write result JSON files into `data/ai_validation_results/YYYY-MM-DD/`, then rerun the report so validated signals are merged. This uses Codex itself, so no extra API key is required inside Codex.
+
+Ollama mode:
+
+```env
+AI_PROVIDER=ollama
+OLLAMA_MODEL=phi3
+OLLAMA_URL=http://127.0.0.1:11434/api/generate
+```
+
+OpenRouter mode:
+
+```env
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=your_openrouter_key
+OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1/chat/completions
+```
+
+The AI prompt asks for strict JSON with verdict, materiality, sentiment, confidence, category, evidence, and manual checks. Only `PASS` or useful `PARTIAL` outputs become `ai_validation` signals. Negative or risky outputs become `red_flag` signals.
 
 Design principle:
 
 ```text
-Python/rules first -> local model only for shortlisted snippets -> paid AI only for final deep research
+Python/rules first -> AI only on shortlisted filings -> fallback to deterministic validation if AI fails
 ```
 
 ### Technical Volume
@@ -660,6 +698,12 @@ EMAIL_TO=chaitusolasa1@gmail.com
 
 TELEGRAM_BOT_TOKEN=your_full_botfather_token
 TELEGRAM_CHAT_ID=your_chat_id
+
+AI_PROVIDER=none
+AI_VALIDATION_MAX_FILINGS=8
+OLLAMA_MODEL=
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openai/gpt-4o-mini
 ```
 
 To get Telegram details:
@@ -729,7 +773,15 @@ Next: Validate filing, numbers, and management commentary.
 
 Codex automation has been configured to run daily at 8:00 AM from this workspace.
 
-The scheduled command is:
+When `AI_PROVIDER=codex_queue`, the automation uses a two-pass flow:
+
+```powershell
+python -B -m stock_tracker.main --date today --universe marketcap --min-market-cap-cr 3000 --max-market-cap-cr 50000 --output-dir reports\marketcap_3000_50000_daily
+```
+
+Codex then validates any queue packets under `data/ai_validation_queue/YYYY-MM-DD/` and writes result JSON files under `data/ai_validation_results/YYYY-MM-DD/`.
+
+Finally it reruns with delivery:
 
 ```powershell
 python -B -m stock_tracker.main --date today --universe marketcap --min-market-cap-cr 3000 --max-market-cap-cr 50000 --output-dir reports\marketcap_3000_50000_daily --send
@@ -748,6 +800,8 @@ Configured in `config/settings.json`:
   "enabled": true,
   "keep_full_reports_days": 7,
   "keep_filing_cache_days": 2,
+  "keep_ai_queue_days": 2,
+  "keep_ai_results_days": 30,
   "keep_bhavcopy_cache_days": 120
 }
 ```
@@ -757,6 +811,8 @@ Default behavior:
 - daily summary files are kept
 - full Markdown reports older than 7 days are deleted from the active output folder
 - downloaded filing attachments/PDFs older than 2 days are deleted
+- AI queue packets older than 2 days are deleted
+- AI result summaries older than 30 days are deleted
 - bhavcopy/index cache files older than 120 days are deleted
 
 This keeps the daily system useful without letting PDFs and replay reports consume disk space. For long-term memory, keep compact summaries such as `daily_summary_YYYY-MM-DD.md`, `combined_*.md`, and `reports/strategy_progress.md`.
@@ -835,7 +891,7 @@ Codex/GenAI is useful for:
 
 - daily automation inside Codex
 - interpreting reports
-- reviewing filings and concalls
+- reviewing queued filings and concalls
 - adding new signal logic
 - validating false positives
 - improving signal weights
@@ -858,7 +914,13 @@ Python = repeatable evidence engine
 Codex/AI = analyst layer, validation, iteration, and deeper reading
 ```
 
-The current implementation already includes the first version of the Python filing-validation engine. Ollama is optional and controlled by `OLLAMA_MODEL`.
+Current AI options:
+
+- Codex queue mode: `AI_PROVIDER=codex_queue`
+- Ollama local mode: `AI_PROVIDER=ollama` plus `OLLAMA_MODEL`
+- OpenRouter mode: `AI_PROVIDER=openrouter` plus `OPENROUTER_API_KEY`
+
+All AI modes are optional. If no provider is configured or the provider fails, the report still runs with deterministic filing validation.
 
 ## Prerequisites
 

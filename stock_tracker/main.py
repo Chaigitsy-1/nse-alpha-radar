@@ -4,6 +4,7 @@ import argparse
 from datetime import date, datetime
 from pathlib import Path
 
+from .ai_validation import build_ai_validation_signals
 from .config import load_config, load_env_file
 from .cleanup import run_cleanup
 from .delivery import send_email, send_telegram
@@ -95,6 +96,16 @@ def main() -> int:
     )
     source_errors.extend(validation_errors)
     signals.extend(validation_signals)
+    ai_validation_signals, ai_validation_errors = build_ai_validation_signals(
+        companies,
+        nse_items,
+        cache_dir=config.root / "data" / "filing_cache",
+        queue_dir=config.root / "data" / "ai_validation_queue",
+        results_dir=config.root / "data" / "ai_validation_results",
+        report_date=report_date,
+    )
+    source_errors.extend(ai_validation_errors)
+    signals.extend(ai_validation_signals)
     signals.extend(classify_price_volume(config, companies, nse_market_rows + price_volume_rows))
     signals.extend(classify_trend_momentum(config, companies, trend_rows))
     signals.extend(classify_fundamentals(config, companies, fundamental_rows))

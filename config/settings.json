@@ -50,6 +50,8 @@
     "enabled": true,
     "keep_full_reports_days": 7,
     "keep_filing_cache_days": 2,
+    "keep_ai_queue_days": 2,
+    "keep_ai_results_days": 30,
     "keep_bhavcopy_cache_days": 120
   }
 }

@@ -2,6 +2,16 @@
 
 All notable changes to the Indian Stock Tracker (signals, scoring, reports, and backtesting) are recorded here.
 
+## Unreleased
+
+### AI Validation Providers
+- Added provider-based AI filing validation.
+- `AI_PROVIDER=codex_queue` writes important filings to a local queue that Codex can validate without a separate API key.
+- `AI_PROVIDER=ollama` validates through a local Ollama model.
+- `AI_PROVIDER=openrouter` validates through OpenRouter using `OPENROUTER_API_KEY`.
+- If AI is unavailable, the tracker still runs with deterministic Python filing validation.
+- Added cleanup retention for AI validation queue/results so raw filing packets do not grow forever.
+
 ## 2026-05-10
 
 ### Filing Validation Engine
