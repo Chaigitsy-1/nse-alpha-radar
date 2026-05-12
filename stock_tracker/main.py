@@ -222,18 +222,26 @@ def _mobile_score_cards(scores, limit: int, *, html_format: bool = False, emphas
         lines.extend(
             [
                 "",
+                _divider(),
                 title_line,
+                "",
                 _field("Grade", f"{tier} ({tier_reason})", html_format),
                 _field("Action", action, html_format, value_bold=emphasize),
                 _field("Score", f"{score.total:.2f} | Risk: {score.risk:.2f}", html_format),
                 _field("R/R", _compact_risk_reward(score), html_format, value_bold=emphasize),
+                "",
                 _field("Validation", _compact_validation(score), html_format),
                 _field("Found", _compact_found_reason(score), html_format, value_bold=emphasize),
                 _field("Signal", _compact_why(score), html_format),
+                "",
                 _field("Next", _compact_next_step(action_reason), html_format),
             ]
         )
     return lines
+
+
+def _divider() -> str:
+    return "------------------------------"
 
 
 def _field(label: str, value: str, html_format: bool, *, value_bold: bool = False) -> str:

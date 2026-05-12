@@ -761,14 +761,18 @@ No strict actionable setup today.
 HIGH-QUALITY WATCHLIST
 ----------------------
 
+------------------------------
 1. NETWEB - Netweb Technologies India Limited
+
 Grade: A+ (lifecycle plus confirmation)
 Action: Research Candidate
 Score: 4.32 | Risk: 0.00
 R/R: Review entry; CMP 1234.00; stop 1120.00; target 1460.00; R/R 1.85x
+
 Validation: Local filing fallback - validated filing: commercial production
 Found: Filing text supports the catalyst; commencement of commercial production
 Signal: trend_momentum...; capex_lifecycle...
+
 Next: Validate filing, numbers, and management commentary.
 ```
 
