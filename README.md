@@ -746,9 +746,10 @@ Telegram uses a mobile-friendly card layout instead of a wide table.
 Example:
 
 ```text
-Indian Stock Tracker
+NSE Alpha Radar
 Date: 2026-05-10
 Universe: NSE market-cap Rs 3,000-50,000 cr
+Validation: AI merged 2 Codex result(s); top filings capped; local fallback active
 
 Actionable today: 0
 High-quality watchlist: 5
@@ -765,7 +766,8 @@ Grade: A+ (lifecycle plus confirmation)
 Action: Research Candidate
 Score: 4.32 | Risk: 0.00
 R/R: Review entry; CMP 1234.00; stop 1120.00; target 1460.00; R/R 1.85x
-Why: trend_momentum...; capex_lifecycle...
+Validation: Local filing fallback - validated filing: commercial production
+Signal: trend_momentum...; capex_lifecycle...
 Next: Validate filing, numbers, and management commentary.
 ```
 

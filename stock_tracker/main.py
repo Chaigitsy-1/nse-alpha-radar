@@ -142,7 +142,7 @@ def main() -> int:
             print(f"- {error}")
 
     if args.send:
-        body = _summary_body(report_date, scores, report_path)
+        body = _summary_body(report_date, scores, report_path, source_errors)
         email_ok, email_status = _safe_send_email(
             subject=f"Indian Stock Tracker - {report_date.isoformat()}",
             body=body,
@@ -171,13 +171,15 @@ def _safe_send_telegram(body: str):
         return False, f"Telegram skipped: delivery attempt failed ({exc})."
 
 
-def _summary_body(report_date: date, scores, report_path) -> str:
+def _summary_body(report_date: date, scores, report_path, source_errors: list[str] | None = None) -> str:
     actionable = _actionable_scores(scores)
     watchlist = _watchlist_scores(scores)
+    validation_status = _telegram_validation_status(scores, source_errors or [])
     lines = [
-        "Indian Stock Tracker",
+        "NSE Alpha Radar",
         f"Date: {report_date.isoformat()}",
         "Universe: NSE market-cap Rs 3,000-50,000 cr",
+        f"Validation: {validation_status}",
         "",
         f"Actionable today: {len(actionable)}",
         f"High-quality watchlist: {len(watchlist)}",
@@ -214,7 +216,8 @@ def _mobile_score_cards(scores, limit: int) -> list[str]:
                 f"Action: {action}",
                 f"Score: {score.total:.2f} | Risk: {score.risk:.2f}",
                 f"R/R: {_compact_risk_reward(score)}",
-                f"Why: {_compact_why(score)}",
+                f"Validation: {_compact_validation(score)}",
+                f"Signal: {_compact_why(score)}",
                 f"Next: {_compact_next_step(action_reason)}",
             ]
         )
@@ -239,6 +242,73 @@ def _compact_next_step(action_reason: str) -> str:
     if "risk" in action_reason:
         return "Read risk filing first; do not treat as clean setup."
     return "Validate filing, numbers, and management commentary."
+
+
+def _telegram_validation_status(scores, source_errors: list[str]) -> str:
+    ai_merged = _first_warning_value(source_errors, "AI validation merged")
+    ai_queued = _first_warning_value(source_errors, "AI validation queued")
+    ai_capped = _first_warning_value(source_errors, "AI validation candidate scan capped")
+    has_ai_signal = any(signal.category == "ai_validation" for score in scores for signal in score.signals)
+    has_ai_risk = any(
+        signal.category == "red_flag" and "ai validation" in (signal.evidence or "").lower()
+        for score in scores
+        for signal in score.signals
+    )
+    has_local = any(signal.category == "filing_validation" for score in scores for signal in score.signals)
+
+    parts: list[str] = []
+    if ai_merged:
+        parts.append(ai_merged.replace("AI validation ", "AI "))
+    elif ai_queued:
+        parts.append(ai_queued.replace("AI validation ", "AI "))
+    elif has_ai_signal or has_ai_risk:
+        parts.append("AI results active")
+    else:
+        parts.append("AI none")
+
+    if ai_capped:
+        parts.append("top filings capped")
+    if has_local:
+        parts.append("local fallback active")
+    else:
+        parts.append("metadata fallback only")
+    return "; ".join(parts)
+
+
+def _first_warning_value(source_errors: list[str], prefix: str) -> str:
+    for error in source_errors:
+        if error.startswith(prefix):
+            return error.rstrip(".")
+    return ""
+
+
+def _compact_validation(score) -> str:
+    signals = sorted(score.signals, key=_weighted_signal, reverse=True)
+    ai_positive = [signal for signal in signals if signal.category == "ai_validation"]
+    ai_risk = [
+        signal
+        for signal in signals
+        if signal.category == "red_flag" and "ai validation" in (signal.evidence or "").lower()
+    ]
+    local = [signal for signal in signals if signal.category == "filing_validation"]
+    red_flags = [signal for signal in signals if signal.category == "red_flag"]
+
+    if ai_positive:
+        return "AI confirmed - " + _short_signal_evidence(ai_positive[0])
+    if ai_risk:
+        return "AI risk flagged - " + _short_signal_evidence(ai_risk[0])
+    if local:
+        return "Local filing fallback - " + _short_signal_evidence(local[0])
+    if red_flags:
+        return "Risk fallback - " + _short_signal_evidence(red_flags[0])
+    return "Not AI-validated yet; use filing/manual fallback before action"
+
+
+def _short_signal_evidence(signal) -> str:
+    label = (signal.label or signal.evidence or "").replace("|", "/").strip()
+    if len(label) > 72:
+        label = label[:69].rstrip() + "..."
+    return label or signal.category
 
 
 def _compact_why(score) -> str:

@@ -11,6 +11,7 @@ All notable changes to the Indian Stock Tracker (signals, scoring, reports, and 
 - `AI_PROVIDER=openrouter` validates through OpenRouter using `OPENROUTER_API_KEY`.
 - If AI is unavailable, the tracker still runs with deterministic Python filing validation.
 - Added cleanup retention for AI validation queue/results so raw filing packets do not grow forever.
+- Telegram summaries now show AI/fallback validation status in the header and per-stock cards.
 
 ## 2026-05-10
 
