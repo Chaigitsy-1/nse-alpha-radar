@@ -37,24 +37,32 @@ def build_ai_validation_signals(
     results_dir: Path,
     report_date: date,
     max_filings: int | None = None,
+    priority_symbols: set[str] | None = None,
+    priority_contexts: list[dict[str, Any]] | None = None,
 ) -> tuple[list[Signal], list[str]]:
     provider = os.getenv("AI_PROVIDER", "none").strip().lower()
     if provider in {"", "none", "off", "false", "0"}:
         return [], []
 
     max_filings = max_filings or int(os.getenv("AI_VALIDATION_MAX_FILINGS", "8") or "8")
+    priority_symbols = {symbol.upper().strip() for symbol in (priority_symbols or set()) if symbol}
     candidates, errors = _candidate_packets(
         companies,
         items,
         cache_dir=cache_dir,
         max_filings=max_filings,
+        priority_symbols=priority_symbols,
     )
+    context_packets = _context_packets(priority_contexts or [], report_date=report_date)
+    if context_packets:
+        candidates = context_packets + candidates
+        errors.append(f"AI high-conviction thesis review queued/checked for {len(context_packets)} stock(s).")
     if not candidates:
         return [], errors
 
     signals: list[Signal] = []
     if provider == "codex_queue":
-        queued, merged = _codex_queue_validation(
+        queued, reviewed, merged = _codex_queue_validation(
             candidates,
             queue_dir=queue_dir / report_date.isoformat(),
             results_dir=results_dir / report_date.isoformat(),
@@ -64,8 +72,8 @@ def build_ai_validation_signals(
             errors.append(
                 f"AI validation queued {queued} filing(s) for Codex; rerun after result JSON is written."
             )
-        if merged:
-            errors.append(f"AI validation merged {len(merged)} Codex result(s).")
+        if reviewed:
+            errors.append(f"AI validation reviewed {reviewed} Codex result(s); {len(merged)} became scoring signal(s).")
     elif provider == "ollama":
         provider_signals, provider_errors = _run_model_provider(candidates, provider="ollama")
         signals.extend(provider_signals)
@@ -86,18 +94,36 @@ def _candidate_packets(
     *,
     cache_dir: Path,
     max_filings: int,
+    priority_symbols: set[str],
 ) -> tuple[list[dict[str, Any]], list[str]]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
     packets: list[dict[str, Any]] = []
     seen: set[str] = set()
+    priority_max_filings = int(os.getenv("AI_VALIDATION_HIGH_CONVICTION_MAX_FILINGS", "80") or "80")
+    priority_count = 0
+    regular_count = 0
+    important_priority_symbols: set[str] = set()
 
-    for item in items:
-        if len(packets) >= max_filings:
-            break
+    ordered_items = sorted(
+        items,
+        key=lambda item: 0 if item.symbol_hint.upper().strip() in priority_symbols else 1,
+    )
+
+    for item in ordered_items:
         symbol = item.symbol_hint.upper().strip()
         if not symbol or symbol not in companies or not _is_important_item(item):
             continue
+        is_priority = symbol in priority_symbols
+        if is_priority:
+            if priority_count >= priority_max_filings:
+                continue
+            priority_count += 1
+            important_priority_symbols.add(symbol)
+        else:
+            if regular_count >= max_filings:
+                continue
+            regular_count += 1
         packet_id = _packet_id(item)
         if packet_id in seen:
             continue
@@ -125,9 +151,45 @@ def _candidate_packets(
                 "instructions": _validation_instructions(),
             }
         )
-    if len(packets) >= max_filings:
+    if regular_count >= max_filings:
         errors.append(f"AI validation candidate scan capped at {max_filings} important filing(s).")
+    if priority_count >= priority_max_filings:
+        errors.append(f"AI high-conviction filing scan capped at {priority_max_filings} filing(s).")
+    missing_priority = sorted(priority_symbols - important_priority_symbols)
+    if missing_priority:
+        shown = ", ".join(missing_priority[:12])
+        suffix = f", +{len(missing_priority) - 12} more" if len(missing_priority) > 12 else ""
+        errors.append(f"AI filing scan found no important fresh filing for high-conviction symbol(s): {shown}{suffix}.")
     return packets, errors
+
+
+def _context_packets(contexts: list[dict[str, Any]], *, report_date: date) -> list[dict[str, Any]]:
+    max_contexts = int(os.getenv("AI_VALIDATION_HIGH_CONVICTION_MAX_SYMBOLS", "40") or "40")
+    packets: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for context in contexts[:max_contexts]:
+        symbol = str(context.get("symbol", "")).upper().strip()
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        text = _compact_text(str(context.get("text", "")))
+        packet_id = hashlib.sha1(f"{report_date.isoformat()}|high-conviction|{symbol}|{text[:500]}".encode("utf-8")).hexdigest()[:16]
+        packets.append(
+            {
+                "id": packet_id,
+                "symbol": symbol,
+                "company_name": str(context.get("company_name", symbol)),
+                "filing_title": f"High-conviction thesis review - {symbol}",
+                "filing_summary": str(context.get("summary", "")),
+                "link": "",
+                "source": "NSE Alpha Radar high-conviction thesis",
+                "published": report_date.isoformat(),
+                "extraction_note": "report signals context",
+                "text": text[:6500],
+                "instructions": _validation_instructions(),
+            }
+        )
+    return packets
 
 
 def _codex_queue_validation(
@@ -135,16 +197,18 @@ def _codex_queue_validation(
     *,
     queue_dir: Path,
     results_dir: Path,
-) -> tuple[int, list[AIValidationSignal]]:
+) -> tuple[int, int, list[AIValidationSignal]]:
     queue_dir.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
     queued = 0
+    reviewed = 0
     merged: list[AIValidationSignal] = []
 
     for packet in packets:
         result_path = results_dir / f"{packet['id']}.json"
         if result_path.exists():
             parsed = _load_result(result_path)
+            reviewed += 1
             result = _result_to_validation(packet, parsed, source="Codex AI validation")
             if result:
                 merged.append(result)
@@ -154,7 +218,7 @@ def _codex_queue_validation(
             queue_path.write_text(json.dumps(packet, indent=2), encoding="utf-8")
         queued += 1
 
-    return queued, merged
+    return queued, reviewed, merged
 
 
 def _run_model_provider(packets: list[dict[str, Any]], *, provider: str) -> tuple[list[Signal], list[str]]:
@@ -347,7 +411,7 @@ def _prompt_for_packet(packet: dict[str, Any]) -> str:
 
 def _validation_instructions() -> str:
     return (
-        "Validate whether this filing creates an investable signal for an Indian mid/small-cap stock. "
+        "Validate whether this filing or high-conviction report thesis creates an investable signal for an Indian mid/small-cap stock. "
         "Focus on durable evidence: capex commissioning, utilization, revenue/profit jump, order book, "
         "margin expansion, debt reduction, management guidance, turnaround, and sector tailwind linkage. "
         "Reject boilerplate, calendar-only notices, weak sentiment, one-off accounting gains, and unverified hype. "

@@ -97,6 +97,13 @@ def main() -> int:
     )
     source_errors.extend(validation_errors)
     signals.extend(validation_signals)
+    signals.extend(classify_price_volume(config, companies, nse_market_rows + price_volume_rows))
+    signals.extend(classify_trend_momentum(config, companies, trend_rows))
+    signals.extend(classify_fundamentals(config, companies, fundamental_rows))
+    signals.extend(build_capex_lifecycle_signals(signals, report_date=report_date, history_dir=output_dir))
+
+    preliminary_scores = score_companies(companies, signals)
+    high_conviction_symbols = _high_conviction_symbols(preliminary_scores)
     ai_validation_signals, ai_validation_errors = build_ai_validation_signals(
         companies,
         nse_items,
@@ -104,13 +111,11 @@ def main() -> int:
         queue_dir=config.root / "data" / "ai_validation_queue",
         results_dir=config.root / "data" / "ai_validation_results",
         report_date=report_date,
+        priority_symbols=high_conviction_symbols,
+        priority_contexts=_high_conviction_contexts(preliminary_scores, high_conviction_symbols),
     )
     source_errors.extend(ai_validation_errors)
     signals.extend(ai_validation_signals)
-    signals.extend(classify_price_volume(config, companies, nse_market_rows + price_volume_rows))
-    signals.extend(classify_trend_momentum(config, companies, trend_rows))
-    signals.extend(classify_fundamentals(config, companies, fundamental_rows))
-    signals.extend(build_capex_lifecycle_signals(signals, report_date=report_date, history_dir=output_dir))
 
     scores = score_companies(companies, signals)
     risk_reward, risk_reward_errors = load_bhavcopy_risk_reward(report_date, {score.symbol for score in scores})
@@ -171,6 +176,52 @@ def _safe_send_telegram(body: str):
         return send_telegram(body)
     except Exception as exc:
         return False, f"Telegram skipped: delivery attempt failed ({exc})."
+
+
+def _high_conviction_symbols(scores) -> set[str]:
+    out: set[str] = set()
+    for score in scores:
+        tier, _reason = _quality_tier_for_score(score)
+        if tier in {"A+", "A", "B"}:
+            out.add(score.symbol)
+    return out
+
+
+def _high_conviction_contexts(scores, symbols: set[str]) -> list[dict]:
+    contexts: list[dict] = []
+    for score in sorted(scores, key=lambda item: item.total, reverse=True):
+        if score.symbol not in symbols:
+            continue
+        tier, tier_reason = _quality_tier_for_score(score)
+        action, action_reason = _action_for_score(score)
+        top_signals = sorted(score.signals, key=_weighted_signal, reverse=True)[:6]
+        signal_lines = [
+            (
+                f"- {signal.category}: {signal.label}; confidence {signal.confidence:.2f}; "
+                f"evidence: {signal.evidence}; source: {signal.source}; link: {signal.link}"
+            )
+            for signal in top_signals
+        ]
+        contexts.append(
+            {
+                "symbol": score.symbol,
+                "company_name": score.company_name,
+                "summary": f"{tier} high-conviction preliminary score; {action}.",
+                "text": "\n".join(
+                    [
+                        f"Company: {score.company_name} ({score.symbol})",
+                        f"Preliminary tier: {tier} ({tier_reason})",
+                        f"Action label: {action} ({action_reason})",
+                        f"Scores: total {score.total:.2f}, short {score.short_term:.2f}, medium {score.medium_term:.2f}, long {score.long_term:.2f}, turnaround {score.turnaround:.2f}, risk {score.risk:.2f}",
+                        "Top evidence signals:",
+                        *signal_lines,
+                        "",
+                        "Task: Validate whether this high-conviction report shortlist deserves to remain A+/A/B after AI review. Reject if it is mostly calendar noise, unvalidated momentum, weak filing evidence, unreadable filing content, or risk-heavy.",
+                    ]
+                ),
+            }
+        )
+    return contexts
 
 
 def _summary_body(
@@ -279,9 +330,11 @@ def _compact_next_step(action_reason: str) -> str:
 
 
 def _telegram_validation_status(scores, source_errors: list[str]) -> str:
+    ai_reviewed = _first_warning_value(source_errors, "AI validation reviewed")
     ai_merged = _first_warning_value(source_errors, "AI validation merged")
     ai_queued = _first_warning_value(source_errors, "AI validation queued")
     ai_capped = _first_warning_value(source_errors, "AI validation candidate scan capped")
+    ai_high_conviction = _first_warning_value(source_errors, "AI high-conviction thesis review")
     has_ai_signal = any(signal.category == "ai_validation" for score in scores for signal in score.signals)
     has_ai_risk = any(
         signal.category == "red_flag" and "ai validation" in (signal.evidence or "").lower()
@@ -291,7 +344,9 @@ def _telegram_validation_status(scores, source_errors: list[str]) -> str:
     has_local = any(signal.category == "filing_validation" for score in scores for signal in score.signals)
 
     parts: list[str] = []
-    if ai_merged:
+    if ai_reviewed:
+        parts.append(ai_reviewed.replace("AI validation ", "AI "))
+    elif ai_merged:
         parts.append(ai_merged.replace("AI validation ", "AI "))
     elif ai_queued:
         parts.append(ai_queued.replace("AI validation ", "AI "))
@@ -302,6 +357,8 @@ def _telegram_validation_status(scores, source_errors: list[str]) -> str:
 
     if ai_capped:
         parts.append("top filings capped")
+    if ai_high_conviction:
+        parts.append(ai_high_conviction.replace("AI ", ""))
     if has_local:
         parts.append("local fallback active")
     else:

@@ -15,6 +15,8 @@ All notable changes to the Indian Stock Tracker (signals, scoring, reports, and 
 - Telegram cards now include a `Found:` line explaining the concrete shortlist reason in plain English.
 - Telegram delivery now uses safe HTML formatting so actionable names and key fields render in bold.
 - Telegram stock cards now include divider lines and spacing between detail groups for easier mobile reading.
+- AI validation now queues every preliminary A+/A/B high-conviction stock thesis for Codex review, not just the first capped filing packets.
+- AI status wording now separates reviewed Codex results from scoring signals actually promoted into the report.
 
 ## 2026-05-10
 

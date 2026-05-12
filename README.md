@@ -292,9 +292,11 @@ Codex queue mode:
 ```env
 AI_PROVIDER=codex_queue
 AI_VALIDATION_MAX_FILINGS=8
+AI_VALIDATION_HIGH_CONVICTION_MAX_SYMBOLS=40
+AI_VALIDATION_HIGH_CONVICTION_MAX_FILINGS=80
 ```
 
-The first run writes JSON packets for important filings. Codex can read those packets, write result JSON files into `data/ai_validation_results/YYYY-MM-DD/`, then rerun the report so validated signals are merged. This uses Codex itself, so no extra API key is required inside Codex.
+The first run writes JSON packets for important filings and every preliminary A+/A/B high-conviction stock thesis. Codex can read those packets, write result JSON files into `data/ai_validation_results/YYYY-MM-DD/`, then rerun the report so validated signals are merged. This uses Codex itself, so no extra API key is required inside Codex.
 
 Ollama mode:
 
@@ -926,6 +928,7 @@ Current AI options:
 - Codex queue mode: `AI_PROVIDER=codex_queue`
 - Ollama local mode: `AI_PROVIDER=ollama` plus `OLLAMA_MODEL`
 - OpenRouter mode: `AI_PROVIDER=openrouter` plus `OPENROUTER_API_KEY`
+- Preliminary A+/A/B names always receive a high-conviction thesis review packet, capped by `AI_VALIDATION_HIGH_CONVICTION_MAX_SYMBOLS`.
 
 All AI modes are optional. If no provider is configured or the provider fails, the report still runs with deterministic filing validation.
 
