@@ -4,6 +4,14 @@ All notable changes to the Indian Stock Tracker (signals, scoring, reports, and 
 
 ## 2026-05-10
 
+### Filing Validation Engine
+- Added a local Python filing-validation layer.
+- Important NSE attachments are downloaded and cached under `data/filing_cache/`.
+- XML/XBRL filings are parsed directly with Python.
+- PDF extraction is attempted with a dependency-free best-effort parser.
+- Validation signals can now promote evidence found inside filings, not just exchange headlines.
+- Optional Ollama integration is supported through `OLLAMA_MODEL`; only shortlisted filing snippets are sent to the local model.
+
 ### Risk/Reward Layer
 - Added a first-pass technical risk/reward model from NSE bhavcopy OHLC history.
 - Each scored company can now include:

@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .env
 data/cache/
+data/filing_cache/
 data/market_cap_*.xlsx
 reports/*
 !reports/strategy_progress.md

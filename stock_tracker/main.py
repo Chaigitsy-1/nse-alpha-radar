@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .config import load_config, load_env_file
 from .delivery import send_email, send_telegram
+from .filing_validation import build_filing_validation_signals
 from .lifecycle import build_capex_lifecycle_signals
 from .report import (
     _action_for_score,
@@ -86,6 +87,13 @@ def main() -> int:
 
     signals = []
     signals.extend(classify_source_items(config, companies, nse_items + bse_items + manual_items))
+    validation_signals, validation_errors = build_filing_validation_signals(
+        companies,
+        nse_items,
+        cache_dir=config.root / "data" / "filing_cache",
+    )
+    source_errors.extend(validation_errors)
+    signals.extend(validation_signals)
     signals.extend(classify_price_volume(config, companies, nse_market_rows + price_volume_rows))
     signals.extend(classify_trend_momentum(config, companies, trend_rows))
     signals.extend(classify_fundamentals(config, companies, fundamental_rows))

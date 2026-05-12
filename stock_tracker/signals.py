@@ -322,7 +322,7 @@ def _horizon_for_category(category: str) -> str:
         return "short"
     if category in {"turnaround"}:
         return "turnaround"
-    if category in {"long_term_tailwind", "financial_quality", "management_guidance", "capex_lifecycle"}:
+    if category in {"long_term_tailwind", "financial_quality", "management_guidance", "capex_lifecycle", "filing_validation"}:
         return "long"
     if category == "red_flag":
         return "risk"

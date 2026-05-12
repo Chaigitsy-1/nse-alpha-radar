@@ -66,6 +66,7 @@ indian-stock-tracker/
 - Loads Nifty Midcap 150 + Nifty Smallcap 250, or an NSE official market-cap filtered universe.
 - Pulls NSE corporate announcements, board meetings, corporate actions, market snapshots, index closes, and bhavcopy data.
 - Classifies signals into short-term triggers, long-term tailwinds, management guidance, financial quality, turnaround, technical volume, trend momentum, sentiment, red flags, and capex lifecycle.
+- Downloads/caches important NSE attachments and performs local filing validation before any model is needed.
 - Uses bhavcopy history for 5d/20d/60d trend and relative strength percentiles.
 - Adds a first-pass technical risk/reward layer using bhavcopy price structure.
 - Builds a derived capex lifecycle signal by connecting current signals with historical generated reports.
@@ -246,6 +247,40 @@ Looks for improving financial quality:
 - asset turnover
 
 Base category weight: `1.05`
+
+### Filing Validation
+
+The tracker has a local Python filing-validation layer.
+
+It runs only on important NSE filings such as:
+
+- results/outcome filings
+- investor presentations
+- press releases
+- concalls/earnings call transcripts
+- order/capex/commissioning/commercial production updates
+
+What it does locally:
+
+- downloads and caches the attachment under `data/filing_cache/`
+- parses XML/XBRL directly with Python
+- attempts dependency-free PDF text extraction when possible
+- scans extracted text and NSE metadata for growth, margin, capex, order book, guidance, turnaround, and red-flag terms
+- creates a `filing_validation` signal when it finds supporting evidence
+
+Optional local-model mode:
+
+```env
+OLLAMA_MODEL=phi3
+```
+
+When `OLLAMA_MODEL` is set and Ollama is running locally, the tracker sends only a short extracted snippet from shortlisted important filings to Ollama. It asks for a tiny JSON classification: materiality, sentiment, and reason. This is optional and is not required for the core tracker.
+
+Design principle:
+
+```text
+Python/rules first -> local model only for shortlisted snippets -> paid AI only for final deep research
+```
 
 ### Technical Volume
 
@@ -798,6 +833,8 @@ Python = repeatable evidence engine
 Codex/AI = analyst layer, validation, iteration, and deeper reading
 ```
 
+The current implementation already includes the first version of the Python filing-validation engine. Ollama is optional and controlled by `OLLAMA_MODEL`.
+
 ## Prerequisites
 
 - Windows PowerShell
@@ -817,6 +854,7 @@ Optional future packages are listed in `requirements.txt`.
 - Some red-flag keywords can be noisy in routine compliance filings.
 - Fundamentals are currently limited unless `data/fundamentals.csv` is maintained.
 - The system does not yet parse full PDF concall transcripts or investor presentations deeply.
+- PDF extraction is best-effort unless a stronger parser is added later.
 - Telegram messages are capped around Telegram's message limits, so the full Markdown report remains the source of detail.
 - Risk/reward is technical-price-structure based. It is not yet valuation-based.
 - This is not financial advice and should not be used without manual filing review.

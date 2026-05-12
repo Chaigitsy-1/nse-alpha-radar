@@ -174,6 +174,7 @@ def _filtered_top_overall(scores: list[CompanyScore]) -> list[CompanyScore]:
                 "long_term_tailwind",
                 "management_guidance",
                 "capex_lifecycle",
+                "filing_validation",
             }
         )
         has_event_only = categories.issubset({"short_term_trigger"})
@@ -196,8 +197,8 @@ def _actionable_scores(scores: list[CompanyScore]) -> list[CompanyScore]:
     for score in _filtered_top_overall(scores):
         tier, _reason = _quality_tier_for_score(score)
         categories = {signal.category for signal in score.signals}
-        has_core = bool(categories & {"capex_lifecycle", "turnaround", "financial_quality"})
-        has_confirmation = bool(categories & {"trend_momentum", "technical_volume", "management_guidance"})
+        has_core = bool(categories & {"capex_lifecycle", "turnaround", "financial_quality", "filing_validation"})
+        has_confirmation = bool(categories & {"trend_momentum", "technical_volume", "management_guidance", "filing_validation"})
         has_strong_lifecycle = _has_strong_lifecycle(score.signals)
         has_turnaround_confirmation = "turnaround" in categories and has_confirmation
         has_financial_confirmation = "financial_quality" in categories and has_confirmation
@@ -298,7 +299,7 @@ def _overall_confidence(signals: Iterable[Signal]) -> float:
 def _action_for_score(score: CompanyScore) -> tuple[str, str]:
     categories = {signal.category for signal in score.signals}
     has_tech = "technical_volume" in categories
-    has_quality = bool(categories & {"financial_quality", "long_term_tailwind", "management_guidance", "capex_lifecycle"})
+    has_quality = bool(categories & {"financial_quality", "long_term_tailwind", "management_guidance", "capex_lifecycle", "filing_validation"})
     has_turnaround = "turnaround" in categories
     has_red_flag = "red_flag" in categories or score.risk >= 1.2
 
@@ -323,16 +324,17 @@ def _quality_tier_for_score(score: CompanyScore) -> tuple[str, str]:
     has_turnaround = "turnaround" in categories
     has_financial = "financial_quality" in categories
     has_guidance = "management_guidance" in categories
+    has_validation = "filing_validation" in categories
     has_tailwind = "long_term_tailwind" in categories
     has_market_confirmation = bool(categories & {"technical_volume", "trend_momentum"})
     has_noisy_event_only = categories and categories.issubset({"short_term_trigger"})
-    has_quality_context = bool(categories & {"capex_lifecycle", "turnaround", "financial_quality", "management_guidance", "long_term_tailwind"})
+    has_quality_context = bool(categories & {"capex_lifecycle", "turnaround", "financial_quality", "management_guidance", "long_term_tailwind", "filing_validation"})
 
     if has_red_flag and score.total < 3.0:
         return "Avoid", "red flag/risk dominates"
-    if has_lifecycle and (has_financial or has_guidance or has_market_confirmation) and confidence >= 0.60:
+    if has_lifecycle and (has_financial or has_guidance or has_validation or has_market_confirmation) and confidence >= 0.60:
         return "A+", "lifecycle plus confirmation"
-    if (has_lifecycle or has_turnaround) and (has_market_confirmation or has_guidance or has_financial):
+    if (has_lifecycle or has_turnaround or has_validation) and (has_market_confirmation or has_guidance or has_financial or has_validation):
         return "A", "thesis plus confirmation"
     if has_quality_context and (score.total >= 2.0 or confidence >= 0.60):
         return "B", "thesis signal, needs stronger proof"
@@ -385,6 +387,8 @@ def _thesis_for_score(score: CompanyScore) -> str:
             parts.append("Capex lifecycle evidence is connecting capacity, execution, demand, financial follow-through, or market confirmation.")
         elif signal.category == "management_guidance":
             parts.append("Management guidance/presentation may shift expectations and drive re-rating.")
+        elif signal.category == "filing_validation":
+            parts.append("Local filing validation found supporting evidence beyond the exchange headline.")
         elif signal.category == "short_term_trigger":
             label = (signal.label or "").lower()
             if "results" in label or "outcome" in label:
@@ -421,6 +425,8 @@ def _next_steps(score: CompanyScore) -> list[str]:
         steps.append("  - Map the tailwind to company execution (capacity, order book, customers, competitive moat).")
     if "capex_lifecycle" in categories:
         steps.append("  - Trace the sequence: capex -> commissioning -> utilization -> revenue/profit -> guidance -> price confirmation.")
+    if "filing_validation" in categories:
+        steps.append("  - Review the extracted filing evidence; confirm the numbers are recurring and not one-off.")
     if "red_flag" in categories or score.risk >= 1.2:
         steps.append("  - Read the red-flag filing; decide if it's temporary noise or structural risk.")
     if len(steps) == 1:
