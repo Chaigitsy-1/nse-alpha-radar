@@ -217,6 +217,7 @@ def _mobile_score_cards(scores, limit: int) -> list[str]:
                 f"Score: {score.total:.2f} | Risk: {score.risk:.2f}",
                 f"R/R: {_compact_risk_reward(score)}",
                 f"Validation: {_compact_validation(score)}",
+                f"Found: {_compact_found_reason(score)}",
                 f"Signal: {_compact_why(score)}",
                 f"Next: {_compact_next_step(action_reason)}",
             ]
@@ -304,11 +305,97 @@ def _compact_validation(score) -> str:
     return "Not AI-validated yet; use filing/manual fallback before action"
 
 
+def _compact_found_reason(score) -> str:
+    signals = sorted(score.signals, key=_weighted_signal, reverse=True)
+    if not signals:
+        return "No clear shortlist reason."
+
+    priority = [
+        "ai_validation",
+        "filing_validation",
+        "capex_lifecycle",
+        "turnaround",
+        "financial_quality",
+        "management_guidance",
+        "long_term_tailwind",
+        "short_term_trigger",
+        "trend_momentum",
+        "technical_volume",
+        "red_flag",
+    ]
+    picked = None
+    for category in priority:
+        picked = next((signal for signal in signals if signal.category == category), None)
+        if picked:
+            break
+    picked = picked or signals[0]
+
+    reason = _plain_reason_for_signal(picked)
+    evidence = _clean_evidence(picked.evidence or picked.label)
+    if evidence and evidence.lower() not in reason.lower():
+        reason = f"{reason}; {evidence}"
+    return _clip(reason, 145)
+
+
+def _plain_reason_for_signal(signal) -> str:
+    label = (signal.label or "").lower()
+    category = signal.category
+    if category == "ai_validation":
+        return "AI found material filing evidence"
+    if category == "filing_validation":
+        return "Filing text supports the catalyst"
+    if category == "capex_lifecycle":
+        return "Capex/execution cycle is connecting with demand, financials, or price confirmation"
+    if category == "turnaround":
+        return "Turnaround clue found: operations/profitability/capacity improving"
+    if category == "financial_quality":
+        return "Financial quality clue found: growth, margin, cash flow, or debt improvement"
+    if category == "management_guidance":
+        return "Management commentary/guidance may shift expectations"
+    if category == "long_term_tailwind":
+        return "Long-term sector/business tailwind detected"
+    if category == "short_term_trigger":
+        if "commercial production" in label or "commissioning" in label:
+            return "Near-term catalyst: commercial production/commissioning"
+        if "results" in label or "outcome" in label:
+            return "Near-term catalyst: results/outcome filing"
+        if "order" in label or "contract" in label or "loa" in label:
+            return "Near-term catalyst: order/contract visibility"
+        return "Near-term corporate event catalyst"
+    if category == "trend_momentum":
+        return "Price trend shows relative strength versus the scanned universe"
+    if category == "technical_volume":
+        return "Price/volume action shows market confirmation"
+    if category == "red_flag":
+        return "Risk item found; shortlist only for risk review"
+    return "Shortlisted by highest weighted signal"
+
+
+def _clean_evidence(value: str) -> str:
+    value = (value or "").replace("|", "/").strip()
+    prefixes = [
+        "Local filing validation (pdf text parsed) found evidence in ",
+        "Local filing validation (xml parsed) found evidence in ",
+        "Local filing validation (metadata only) found evidence in ",
+        "Codex AI validation: ",
+    ]
+    for prefix in prefixes:
+        if value.startswith(prefix):
+            value = value[len(prefix) :]
+            break
+    return _clip(value, 90)
+
+
 def _short_signal_evidence(signal) -> str:
     label = (signal.label or signal.evidence or "").replace("|", "/").strip()
-    if len(label) > 72:
-        label = label[:69].rstrip() + "..."
-    return label or signal.category
+    return _clip(label, 72) or signal.category
+
+
+def _clip(value: str, limit: int) -> str:
+    value = " ".join((value or "").split())
+    if len(value) > limit:
+        return value[: max(0, limit - 3)].rstrip() + "..."
+    return value
 
 
 def _compact_why(score) -> str:
