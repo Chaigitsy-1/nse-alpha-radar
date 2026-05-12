@@ -67,6 +67,7 @@ indian-stock-tracker/
 - Pulls NSE corporate announcements, board meetings, corporate actions, market snapshots, index closes, and bhavcopy data.
 - Classifies signals into short-term triggers, long-term tailwinds, management guidance, financial quality, turnaround, technical volume, trend momentum, sentiment, red flags, and capex lifecycle.
 - Uses bhavcopy history for 5d/20d/60d trend and relative strength percentiles.
+- Adds a first-pass technical risk/reward layer using bhavcopy price structure.
 - Builds a derived capex lifecycle signal by connecting current signals with historical generated reports.
 - Writes a daily Markdown report.
 - Sends Telegram/email summaries.
@@ -446,6 +447,55 @@ if all signals are short_term_trigger:
 
 This prevents board-meeting/results-calendar noise from dominating the report.
 
+## Risk/Reward Calculation
+
+The tracker now adds a first-pass **technical risk/reward** review for each scored company.
+
+This is not a full intrinsic valuation model. It does not know fair value, DCF, PE bands, or earnings upgrades yet. It uses recent NSE bhavcopy OHLC data to decide whether the current price offers a reasonable entry structure.
+
+For each scored stock, the engine calculates:
+
+- CMP from latest available bhavcopy close
+- 20-trading-day support zone
+- stop-loss/invalidation below support
+- 60-trading-day high
+- target based on 60d high or a minimum reward multiple
+- downside percentage
+- upside percentage
+- reward:risk ratio
+- entry verdict
+
+Formula outline:
+
+```text
+support = max(20d_low, 20d_average_close * 0.92)
+stop_loss = support * 0.97
+risk_per_share = max(CMP - stop_loss, CMP * 0.02)
+target = max(60d_high, CMP + risk_per_share * 1.8)
+downside_pct = (CMP - stop_loss) / CMP * 100
+upside_pct = (target - CMP) / CMP * 100
+reward_risk = upside_pct / downside_pct
+```
+
+Verdicts:
+
+- `Attractive R/R`: reward:risk >= 2.0 and downside <= 10%
+- `Review entry`: reward:risk >= 1.5 and downside <= 12%
+- `Neutral R/R`: needs better entry or stronger upside evidence
+- `Wait pullback`: stock is stretched versus recent base
+- `Poor R/R`: upside does not compensate downside
+- `Avoid chase`: downside to invalidation is too wide
+
+The strict `Actionable Today` gate now requires acceptable risk/reward too:
+
+```text
+reward_risk >= 1.2
+downside_pct <= 15%
+verdict is not Poor R/R or Avoid chase
+```
+
+This makes `Actionable Today` closer to a trade/investment review candidate, not just a research candidate.
+
 ## Quality Tiers
 
 Quality tiers are computed in `stock_tracker/report.py`.
@@ -634,6 +684,7 @@ HIGH-QUALITY WATCHLIST
 Grade: A+ (lifecycle plus confirmation)
 Action: Research Candidate
 Score: 4.32 | Risk: 0.00
+R/R: Review entry; CMP 1234.00; stop 1120.00; target 1460.00; R/R 1.85x
 Why: trend_momentum...; capex_lifecycle...
 Next: Validate filing, numbers, and management commentary.
 ```
@@ -767,6 +818,7 @@ Optional future packages are listed in `requirements.txt`.
 - Fundamentals are currently limited unless `data/fundamentals.csv` is maintained.
 - The system does not yet parse full PDF concall transcripts or investor presentations deeply.
 - Telegram messages are capped around Telegram's message limits, so the full Markdown report remains the source of detail.
+- Risk/reward is technical-price-structure based. It is not yet valuation-based.
 - This is not financial advice and should not be used without manual filing review.
 
 ## Recommended Daily Workflow

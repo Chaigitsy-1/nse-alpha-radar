@@ -24,6 +24,7 @@ from .sources import (
     load_nse_corporate_items_for_date,
     load_nse_market_snapshot_for_date,
     load_bhavcopy_trend_rows,
+    load_bhavcopy_risk_reward,
     load_optional_csv,
 )
 from .universe import load_universe_with_warnings
@@ -91,6 +92,10 @@ def main() -> int:
     signals.extend(build_capex_lifecycle_signals(signals, report_date=report_date, history_dir=output_dir))
 
     scores = score_companies(companies, signals)
+    risk_reward, risk_reward_errors = load_bhavcopy_risk_reward(report_date, {score.symbol for score in scores})
+    source_errors.extend(risk_reward_errors)
+    for score in scores:
+        score.risk_reward = risk_reward.get(score.symbol)
     report_path = write_markdown_report(
         report_date=report_date,
         scores=scores,
@@ -180,11 +185,22 @@ def _mobile_score_cards(scores, limit: int) -> list[str]:
                 f"Grade: {tier} ({tier_reason})",
                 f"Action: {action}",
                 f"Score: {score.total:.2f} | Risk: {score.risk:.2f}",
+                f"R/R: {_compact_risk_reward(score)}",
                 f"Why: {_compact_why(score)}",
                 f"Next: {_compact_next_step(action_reason)}",
             ]
         )
     return lines
+
+
+def _compact_risk_reward(score) -> str:
+    rr = getattr(score, "risk_reward", None)
+    if rr is None:
+        return "unavailable"
+    return (
+        f"{rr.verdict}; CMP {rr.cmp:.2f}; stop {rr.stop_loss:.2f}; "
+        f"target {rr.target:.2f}; R/R {rr.reward_risk:.2f}x"
+    )
 
 
 def _compact_next_step(action_reason: str) -> str:

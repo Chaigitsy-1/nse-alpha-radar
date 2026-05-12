@@ -44,6 +44,21 @@ class Signal:
 
 
 @dataclass
+class RiskReward:
+    symbol: str
+    as_of: str
+    cmp: float
+    support: float
+    stop_loss: float
+    target: float
+    downside_pct: float
+    upside_pct: float
+    reward_risk: float
+    verdict: str
+    note: str = ""
+
+
+@dataclass
 class CompanyScore:
     symbol: str
     company_name: str
@@ -54,3 +69,4 @@ class CompanyScore:
     risk: float = 0.0
     total: float = 0.0
     signals: list[Signal] = field(default_factory=list)
+    risk_reward: RiskReward | None = None

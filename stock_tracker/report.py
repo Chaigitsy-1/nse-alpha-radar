@@ -105,6 +105,7 @@ def _company_block(rank: int, score: CompanyScore, metric: str) -> list[str]:
         f"- Quality Tier: **{quality_tier}** ({quality_reason})",
         f"- Confidence (overall): {overall_conf:.2f}",
         f"- Score: {metric_value:.2f} | Total: {score.total:.2f} | Risk: {score.risk:.2f}",
+        f"- Risk/Reward: {_risk_reward_line(score)}",
         f"- Breakdown: short={score.short_term:.2f}, medium={score.medium_term:.2f}, long={score.long_term:.2f}, "
         f"turnaround={score.turnaround:.2f}, risk={score.risk:.2f}",
         f"- Why (top signals): {top_reasons or 'n/a'}",
@@ -122,6 +123,18 @@ def _company_block(rank: int, score: CompanyScore, metric: str) -> list[str]:
     lines.extend(_next_steps(score))
     lines.append("")
     return lines
+
+
+def _risk_reward_line(score: CompanyScore) -> str:
+    rr = score.risk_reward
+    if rr is None:
+        return "unavailable (insufficient bhavcopy history)"
+    return (
+        f"{rr.verdict} | CMP {rr.cmp:.2f} | support {rr.support:.2f} | "
+        f"stop {rr.stop_loss:.2f} | target {rr.target:.2f} | "
+        f"downside {rr.downside_pct:.1f}% | upside {rr.upside_pct:.1f}% | "
+        f"R/R {rr.reward_risk:.2f}x | {rr.note}"
+    )
 
 
 def _top_signals(signals: list[Signal], metric: str) -> list[Signal]:
@@ -193,10 +206,20 @@ def _actionable_scores(scores: list[CompanyScore]) -> list[CompanyScore]:
             and has_core
             and score.risk < 1.2
             and score.total >= 3.0
+            and _has_acceptable_risk_reward(score)
             and (has_strong_lifecycle or has_turnaround_confirmation or has_financial_confirmation)
         ):
             out.append(score)
     return sorted(out, key=lambda score: (score.total, _overall_confidence(score.signals)), reverse=True)
+
+
+def _has_acceptable_risk_reward(score: CompanyScore) -> bool:
+    rr = score.risk_reward
+    if rr is None:
+        return False
+    if rr.verdict in {"Avoid chase", "Poor R/R"}:
+        return False
+    return rr.reward_risk >= 1.2 and rr.downside_pct <= 15.0
 
 
 def _watchlist_scores(scores: list[CompanyScore]) -> list[CompanyScore]:

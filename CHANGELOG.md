@@ -4,6 +4,20 @@ All notable changes to the Indian Stock Tracker (signals, scoring, reports, and 
 
 ## 2026-05-10
 
+### Risk/Reward Layer
+- Added a first-pass technical risk/reward model from NSE bhavcopy OHLC history.
+- Each scored company can now include:
+  - CMP
+  - support
+  - stop/invalidation
+  - target
+  - downside %
+  - upside %
+  - reward:risk ratio
+  - entry verdict
+- `Actionable Today` now requires acceptable technical risk/reward in addition to signal quality.
+- Telegram mobile cards now include the risk/reward verdict.
+
 ### README Overhaul
 - Replaced the lightweight README with a full operating manual covering:
   - repo structure

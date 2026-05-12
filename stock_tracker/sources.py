@@ -14,7 +14,7 @@ import zipfile
 import io as _io
 
 from .config import RuntimeConfig, project_path
-from .models import SourceItem
+from .models import RiskReward, SourceItem
 
 
 USER_AGENT = "Mozilla/5.0 IndianStockTracker/0.1"
@@ -260,9 +260,9 @@ def _get_cached_bhavcopy_csv_text(d: date) -> tuple[str | None, list[str]]:
         return None, [f"NSE bhavcopy {url}: {exc}"]
 
 
-def _load_bhavcopy_close_volume(d: date) -> tuple[dict[str, tuple[float, float]], list[str]]:
+def _load_bhavcopy_ohlcv(d: date) -> tuple[dict[str, tuple[float, float, float, float]], list[str]]:
     """
-    Returns symbol -> (close, volume) for EQ series for the given trading day.
+    Returns symbol -> (close, high, low, volume) for EQ series for the given trading day.
     """
     errors: list[str] = []
     text, errors = _get_cached_bhavcopy_csv_text(d)
@@ -273,19 +273,23 @@ def _load_bhavcopy_close_volume(d: date) -> tuple[dict[str, tuple[float, float]]
     fieldnames = {name.strip() for name in (reader.fieldnames or [])}
     is_legacy = "SYMBOL" in fieldnames
 
-    out: dict[str, tuple[float, float]] = {}
+    out: dict[str, tuple[float, float, float, float]] = {}
     for row in reader:
         if is_legacy:
             if (row.get("SERIES") or "").strip().upper() != "EQ":
                 continue
             symbol = (row.get("SYMBOL") or "").strip().upper()
             close = str(row.get("CLOSE") or "").strip().replace(",", "")
+            high = str(row.get("HIGH") or close).strip().replace(",", "")
+            low = str(row.get("LOW") or close).strip().replace(",", "")
             vol = str(row.get("TOTTRDQTY") or row.get("TOTTRDVAL") or "").strip().replace(",", "")
         else:
             if (row.get("SctySrs") or "").strip().upper() != "EQ":
                 continue
             symbol = (row.get("TckrSymb") or "").strip().upper()
             close = str(row.get("ClsPric") or "").strip().replace(",", "")
+            high = str(row.get("HghPric") or close).strip().replace(",", "")
+            low = str(row.get("LwPric") or close).strip().replace(",", "")
             vol = str(row.get("TtlTradgVol") or "").strip().replace(",", "")
         if not symbol or not close:
             continue
@@ -294,11 +298,24 @@ def _load_bhavcopy_close_volume(d: date) -> tuple[dict[str, tuple[float, float]]
         except ValueError:
             continue
         try:
+            high_v = float(high) if high else close_v
+        except ValueError:
+            high_v = close_v
+        try:
+            low_v = float(low) if low else close_v
+        except ValueError:
+            low_v = close_v
+        try:
             vol_v = float(vol) if vol else 0.0
         except ValueError:
             vol_v = 0.0
-        out[symbol] = (close_v, vol_v)
+        out[symbol] = (close_v, high_v, low_v, vol_v)
     return out, errors
+
+
+def _load_bhavcopy_close_volume(d: date) -> tuple[dict[str, tuple[float, float]], list[str]]:
+    ohlcv, errors = _load_bhavcopy_ohlcv(d)
+    return {symbol: (values[0], values[3]) for symbol, values in ohlcv.items()}, errors
 
 
 def _rewind_trading_days_bhavcopy(
@@ -405,6 +422,130 @@ def _nearest_bhavcopy_date(target: date, back_days: int = 10) -> tuple[date | No
         if data:
             return candidate, data, all_errors
     return None, {}, all_errors
+
+
+def _nearest_bhavcopy_ohlcv_date(
+    target: date,
+    back_days: int = 10,
+) -> tuple[date | None, dict[str, tuple[float, float, float, float]], list[str]]:
+    all_errors: list[str] = []
+    for back in range(0, back_days + 1):
+        candidate = target - timedelta(days=back)
+        data, errors = _load_bhavcopy_ohlcv(candidate)
+        all_errors.extend(errors)
+        if data:
+            return candidate, data, all_errors
+    return None, {}, all_errors
+
+
+def load_bhavcopy_risk_reward(
+    report_date: date,
+    symbols: set[str],
+    *,
+    lookback_trading_days: int = 60,
+) -> tuple[dict[str, RiskReward], list[str]]:
+    """
+    Builds a first-pass technical risk/reward map from NSE bhavcopy OHLC history.
+
+    This is not an intrinsic valuation model. It estimates entry risk using recent
+    price structure: 20d support, a stop below support, and a target based on
+    60d highs or a minimum reward multiple.
+    """
+    errors: list[str] = []
+    d0, today_map, err0 = _nearest_bhavcopy_ohlcv_date(report_date, back_days=10)
+    errors.extend(err0)
+    if not d0:
+        return {}, errors
+
+    history: list[tuple[date, dict[str, tuple[float, float, float, float]]]] = [(d0, today_map)]
+    current = d0
+    for _ in range(lookback_trading_days * 3):
+        if len(history) >= lookback_trading_days:
+            break
+        current = current - timedelta(days=1)
+        day_map, _day_errors = _load_bhavcopy_ohlcv(current)
+        if day_map:
+            history.append((current, day_map))
+
+    out: dict[str, RiskReward] = {}
+    for symbol in symbols:
+        symbol_u = symbol.upper()
+        current_values = today_map.get(symbol_u)
+        if not current_values:
+            continue
+        cmp = current_values[0]
+        symbol_history = [(d, values[symbol_u]) for d, values in history if symbol_u in values]
+        if cmp <= 0 or len(symbol_history) < 20:
+            continue
+
+        last_20 = symbol_history[:20]
+        last_60 = symbol_history[:60]
+        closes_20 = [values[0] for _d, values in last_20]
+        lows_20 = [values[2] for _d, values in last_20]
+        highs_60 = [values[1] for _d, values in last_60]
+
+        avg_20 = sum(closes_20) / len(closes_20)
+        low_20 = min(lows_20)
+        high_60 = max(highs_60)
+        support = max(low_20, avg_20 * 0.92)
+        if support >= cmp:
+            support = min(low_20, cmp * 0.98)
+        stop_loss = support * 0.97
+        risk_per_share = max(cmp - stop_loss, cmp * 0.02)
+        target = max(high_60, cmp + risk_per_share * 1.8)
+        if target <= cmp:
+            target = cmp + risk_per_share * 1.8
+
+        downside_pct = max(0.0, (cmp - stop_loss) / cmp * 100.0)
+        upside_pct = max(0.0, (target - cmp) / cmp * 100.0)
+        reward_risk = upside_pct / downside_pct if downside_pct > 0 else 0.0
+        ret_20 = (cmp - closes_20[-1]) / closes_20[-1] * 100.0 if closes_20[-1] > 0 else 0.0
+        verdict, note = _risk_reward_verdict(
+            reward_risk=reward_risk,
+            downside_pct=downside_pct,
+            ret_20=ret_20,
+            cmp=cmp,
+            avg_20=avg_20,
+        )
+        out[symbol_u] = RiskReward(
+            symbol=symbol_u,
+            as_of=d0.isoformat(),
+            cmp=cmp,
+            support=support,
+            stop_loss=stop_loss,
+            target=target,
+            downside_pct=downside_pct,
+            upside_pct=upside_pct,
+            reward_risk=reward_risk,
+            verdict=verdict,
+            note=note,
+        )
+
+    if d0 != report_date:
+        errors.append(f"NSE bhavcopy risk/reward fallback used {d0.isoformat()} for report date {report_date.isoformat()}.")
+    return out, errors
+
+
+def _risk_reward_verdict(
+    *,
+    reward_risk: float,
+    downside_pct: float,
+    ret_20: float,
+    cmp: float,
+    avg_20: float,
+) -> tuple[str, str]:
+    stretched = ret_20 >= 25.0 or cmp >= avg_20 * 1.12
+    if downside_pct > 15.0:
+        return "Avoid chase", "downside to invalidation is too wide"
+    if reward_risk < 1.2:
+        return "Poor R/R", "upside does not compensate downside"
+    if stretched and downside_pct > 9.0:
+        return "Wait pullback", "move is stretched versus recent base"
+    if reward_risk >= 2.0 and downside_pct <= 10.0:
+        return "Attractive R/R", "reward/risk is healthy if thesis validates"
+    if reward_risk >= 1.5 and downside_pct <= 12.0:
+        return "Review entry", "acceptable only after filing validation"
+    return "Neutral R/R", "needs better entry or stronger upside evidence"
 
 
 def _load_nse_bhavcopy_price_moves(report_date: date) -> tuple[list[dict[str, str]], list[str]]:
