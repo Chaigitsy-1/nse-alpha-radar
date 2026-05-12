@@ -741,7 +741,7 @@ Do not use your normal Gmail password. Use a Google App Password.
 
 ## Telegram Message Format
 
-Telegram uses a mobile-friendly card layout instead of a wide table.
+Telegram uses a mobile-friendly card layout instead of a wide table. The bot sends HTML-formatted text, so section headers, actionable stock names, and key fields such as `Action`, `R/R`, `Validation`, and `Found` appear in bold on mobile.
 
 Example:
 

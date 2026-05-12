@@ -50,6 +50,7 @@ def send_telegram(message: str) -> tuple[bool, str]:
         {
             "chat_id": chat_id,
             "text": message[:3900],
+            "parse_mode": "HTML",
             "disable_web_page_preview": "true",
         }
     ).encode("utf-8")

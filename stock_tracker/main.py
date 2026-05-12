@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 from datetime import date, datetime
 from pathlib import Path
 
@@ -143,13 +144,14 @@ def main() -> int:
 
     if args.send:
         body = _summary_body(report_date, scores, report_path, source_errors)
+        telegram_body = _summary_body(report_date, scores, report_path, source_errors, html_format=True)
         email_ok, email_status = _safe_send_email(
             subject=f"Indian Stock Tracker - {report_date.isoformat()}",
             body=body,
             attachment=report_path,
         )
         print(email_status)
-        telegram_ok, telegram_status = _safe_send_telegram(body)
+        telegram_ok, telegram_status = _safe_send_telegram(telegram_body)
         print(telegram_status)
         if not email_ok or not telegram_ok:
             print("Delivery is partially configured. Report was still generated locally.")
@@ -171,58 +173,81 @@ def _safe_send_telegram(body: str):
         return False, f"Telegram skipped: delivery attempt failed ({exc})."
 
 
-def _summary_body(report_date: date, scores, report_path, source_errors: list[str] | None = None) -> str:
+def _summary_body(
+    report_date: date,
+    scores,
+    report_path,
+    source_errors: list[str] | None = None,
+    *,
+    html_format: bool = False,
+) -> str:
     actionable = _actionable_scores(scores)
     watchlist = _watchlist_scores(scores)
     validation_status = _telegram_validation_status(scores, source_errors or [])
     lines = [
-        "NSE Alpha Radar",
-        f"Date: {report_date.isoformat()}",
-        "Universe: NSE market-cap Rs 3,000-50,000 cr",
-        f"Validation: {validation_status}",
+        _bold("NSE Alpha Radar", html_format),
+        f"{_bold('Date:', html_format)} {_escape(report_date.isoformat(), html_format)}",
+        f"{_bold('Universe:', html_format)} NSE market-cap Rs 3,000-50,000 cr",
+        f"{_bold('Validation:', html_format)} {_escape(validation_status, html_format)}",
         "",
-        f"Actionable today: {len(actionable)}",
-        f"High-quality watchlist: {len(watchlist)}",
+        f"{_bold('Actionable today:', html_format)} {_escape(str(len(actionable)), html_format)}",
+        f"{_bold('High-quality watchlist:', html_format)} {_escape(str(len(watchlist)), html_format)}",
     ]
 
-    lines.extend(["", "ACTIONABLE TODAY", "----------------"])
+    lines.extend(["", _bold("ACTIONABLE TODAY", html_format), "----------------"])
     if actionable:
-        lines.extend(_mobile_score_cards(actionable, limit=5))
+        lines.extend(_mobile_score_cards(actionable, limit=5, html_format=html_format, emphasize=True))
     else:
-        lines.append("No strict actionable setup today.")
+        lines.append(_escape("No strict actionable setup today.", html_format))
 
-    lines.extend(["", "HIGH-QUALITY WATCHLIST", "----------------------"])
+    lines.extend(["", _bold("HIGH-QUALITY WATCHLIST", html_format), "----------------------"])
     if watchlist:
-        lines.extend(_mobile_score_cards(watchlist, limit=7))
+        lines.extend(_mobile_score_cards(watchlist, limit=7, html_format=html_format, emphasize=False))
         if len(watchlist) > 7:
-            lines.append(f"+ {len(watchlist) - 7} more in the full report.")
+            lines.append(_escape(f"+ {len(watchlist) - 7} more in the full report.", html_format))
     else:
-        lines.append("No high-quality watchlist names today.")
+        lines.append(_escape("No high-quality watchlist names today.", html_format))
 
-    lines.extend(["", f"Full report: {report_path}"])
+    lines.extend(["", f"{_bold('Full report:', html_format)} {_escape(str(report_path), html_format)}"])
     return "\n".join(lines)
 
 
-def _mobile_score_cards(scores, limit: int) -> list[str]:
+def _mobile_score_cards(scores, limit: int, *, html_format: bool = False, emphasize: bool = False) -> list[str]:
     lines: list[str] = []
     for rank, score in enumerate(scores[:limit], start=1):
         tier, tier_reason = _quality_tier_for_score(score)
         action, action_reason = _action_for_score(score)
+        title = f"{rank}. {score.symbol} - {score.company_name}"
+        title_line = _bold(title, html_format) if emphasize else _escape(title, html_format)
         lines.extend(
             [
                 "",
-                f"{rank}. {score.symbol} - {score.company_name}",
-                f"Grade: {tier} ({tier_reason})",
-                f"Action: {action}",
-                f"Score: {score.total:.2f} | Risk: {score.risk:.2f}",
-                f"R/R: {_compact_risk_reward(score)}",
-                f"Validation: {_compact_validation(score)}",
-                f"Found: {_compact_found_reason(score)}",
-                f"Signal: {_compact_why(score)}",
-                f"Next: {_compact_next_step(action_reason)}",
+                title_line,
+                _field("Grade", f"{tier} ({tier_reason})", html_format),
+                _field("Action", action, html_format, value_bold=emphasize),
+                _field("Score", f"{score.total:.2f} | Risk: {score.risk:.2f}", html_format),
+                _field("R/R", _compact_risk_reward(score), html_format, value_bold=emphasize),
+                _field("Validation", _compact_validation(score), html_format),
+                _field("Found", _compact_found_reason(score), html_format, value_bold=emphasize),
+                _field("Signal", _compact_why(score), html_format),
+                _field("Next", _compact_next_step(action_reason), html_format),
             ]
         )
     return lines
+
+
+def _field(label: str, value: str, html_format: bool, *, value_bold: bool = False) -> str:
+    value_text = _bold(value, html_format) if value_bold else _escape(value, html_format)
+    return f"{_bold(label + ':', html_format)} {value_text}"
+
+
+def _bold(value: str, html_format: bool) -> str:
+    escaped = _escape(value, html_format)
+    return f"<b>{escaped}</b>" if html_format else escaped
+
+
+def _escape(value: str, html_format: bool) -> str:
+    return html.escape(str(value), quote=False) if html_format else str(value)
 
 
 def _compact_risk_reward(score) -> str:

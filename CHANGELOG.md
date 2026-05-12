@@ -13,6 +13,7 @@ All notable changes to the Indian Stock Tracker (signals, scoring, reports, and 
 - Added cleanup retention for AI validation queue/results so raw filing packets do not grow forever.
 - Telegram summaries now show AI/fallback validation status in the header and per-stock cards.
 - Telegram cards now include a `Found:` line explaining the concrete shortlist reason in plain English.
+- Telegram delivery now uses safe HTML formatting so actionable names and key fields render in bold.
 
 ## 2026-05-10
 
