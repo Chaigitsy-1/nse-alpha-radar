@@ -375,11 +375,11 @@ def _first_warning_value(source_errors: list[str], prefix: str) -> str:
 
 def _compact_validation(score) -> str:
     signals = sorted(score.signals, key=_weighted_signal, reverse=True)
-    ai_positive = [signal for signal in signals if signal.category == "ai_validation"]
+    ai_positive = [signal for signal in signals if _is_ai_positive_signal(signal)]
     ai_risk = [
         signal
         for signal in signals
-        if signal.category == "red_flag" and "ai validation" in (signal.evidence or "").lower()
+        if signal.category == "red_flag" and _is_ai_signal(signal)
     ]
     local = [signal for signal in signals if signal.category == "filing_validation"]
     red_flags = [signal for signal in signals if signal.category == "red_flag"]
@@ -393,6 +393,22 @@ def _compact_validation(score) -> str:
     if red_flags:
         return "Risk fallback - " + _short_signal_evidence(red_flags[0])
     return "Not AI-validated yet; use filing/manual fallback before action"
+
+
+def _is_ai_positive_signal(signal) -> bool:
+    return signal.category != "red_flag" and _is_ai_signal(signal)
+
+
+def _is_ai_signal(signal) -> bool:
+    haystack = " ".join(
+        [
+            signal.category or "",
+            signal.label or "",
+            signal.evidence or "",
+            signal.source or "",
+        ]
+    ).lower()
+    return any(token in haystack for token in ["ai validated", "ai validation", "codex queue", "codex ai"])
 
 
 def _compact_found_reason(score) -> str:
